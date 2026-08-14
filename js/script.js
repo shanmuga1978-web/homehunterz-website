@@ -159,23 +159,10 @@ const PROPERTIES = [
   */
 ];
 
-/* TESTIMONIALS: same pattern — copy an object to add a new review. */
-const TESTIMONIALS = [
-  {
-    quote: "Home Hunterz made our first home purchase feel simple. Every document was explained before we signed anything — no pressure, just clarity.",
-    name: "Priya Ramachandran",
-    role: "Homebuyer, Adyar"
-  },
-  {
-    quote: "We sold our plot within weeks at a fair price. What stood out was how quickly enquiries were followed up and filtered for us.",
-    name: "Karthik Subramanian",
-    role: "Seller, Sriperumbudur"
-  },
-  {
-    quote: "As an NRI investor, I needed someone I could trust on the ground. Home Hunterz handled site visits and paperwork end to end.",
-    name: "Deepa Narayanan",
-    role: "Investor, OMR"
-  }
+/* Testimonials are static markup directly in index.html now (see the
+   Testimonials section) rather than JS-rendered, since it's a fixed
+   3-card grid rather than a carousel — simpler to hand-edit later when
+   swapping in real client reviews.
 ];
 
 /* Shared contact details used across property cards and the modal. */
@@ -289,7 +276,12 @@ function openPropertyModal(propertyId) {
       <source srcset="${property.image}.webp" type="image/webp">
       <img src="${property.image}.jpg" alt="${property.imageAlt}" width="900" height="600">
     </picture>
-    <span class="prop-tag modal-tag">${property.tag}</span>
+    <div class="modal-tag-row">
+      <span class="prop-tag modal-tag">${property.tag}</span>
+      <button type="button" class="modal-share-btn" data-share-property aria-label="Share this property">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg>
+      </button>
+    </div>
     <h3 id="propertyModalTitle">${property.title}</h3>
     ${property.location ? `<p class="modal-location"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> ${property.location}</p>` : ""}
     ${priceHtml}
@@ -297,106 +289,276 @@ function openPropertyModal(propertyId) {
     <div class="modal-actions">
       <a class="btn btn-primary" href="tel:${CONTACT.phone}">Call ${CONTACT.phoneDisplay}</a>
       <a class="btn btn-outline dark" href="https://wa.me/${CONTACT.whatsapp}?text=${waMessage}" target="_blank" rel="noopener">WhatsApp Home Hunterz</a>
+      <button type="button" class="btn btn-outline dark" data-enquire="${property.title}">Enquire Now</button>
     </div>
   `;
 
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
-  document.body.style.overflow = "hidden";
+  modal.querySelector("[data-enquire]").addEventListener("click", () => {
+    closeModal("propertyModal");
+    openEnquiryModal(property.title);
+  });
+
+  modal.querySelector("[data-share-property]").addEventListener("click", e => sharePropertyLink(property, e.currentTarget));
+
+  openModal("propertyModal");
   document.getElementById("propertyModalClose").focus();
 }
 
+/* ==========================================================================
+   2d. PROPERTY SHARE
+   ------------------------------------------------------------------------
+   Builds a URL that identifies this specific property (?property=<id>) and
+   shares it via the native Web Share sheet where available, falling back
+   to copying the link to the clipboard (with a brief "Link copied" tooltip
+   on the button) on desktop browsers that don't support navigator.share.
+   That URL is also what openPropertyFromUrl() below reads on page load, so
+   a shared link actually opens straight to that property, not just the
+   homepage.
+   ========================================================================== */
+function getPropertyShareUrl(property) {
+  const url = new URL(window.location.href);
+  url.hash = "";
+  url.search = `?property=${encodeURIComponent(property.id)}`;
+  return url.toString();
+}
+
+function sharePropertyLink(property, button) {
+  const url = getPropertyShareUrl(property);
+
+  if (navigator.share) {
+    navigator.share({ title: property.title, text: `${property.title} — Home Hunterz`, url }).catch(() => {});
+    return;
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      if (!button) return;
+      button.classList.add("copied");
+      window.setTimeout(() => button.classList.remove("copied"), 1600);
+    });
+    return;
+  }
+
+  window.prompt("Copy this property link:", url);
+}
+
+function openPropertyFromUrl() {
+  const propertyId = new URLSearchParams(window.location.search).get("property");
+  if (propertyId && PROPERTIES.some(p => p.id === propertyId)) {
+    openPropertyModal(propertyId);
+  }
+}
+
 function closePropertyModal() {
-  const modal = document.getElementById("propertyModal");
-  if (!modal) return;
-  modal.classList.remove("open");
-  modal.setAttribute("aria-hidden", "true");
-  document.body.style.overflow = "";
+  closeModal("propertyModal");
 }
 
 function initPropertyModal() {
-  const modal = document.getElementById("propertyModal");
   const closeBtn = document.getElementById("propertyModalClose");
-  if (!modal || !closeBtn) return;
-
-  closeBtn.addEventListener("click", closePropertyModal);
-
-  // Clicking the dimmed backdrop (i.e. the modal wrapper itself, not the
-  // panel inside it) closes the modal.
-  modal.addEventListener("click", e => {
-    if (e.target === modal) closePropertyModal();
-  });
-
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && modal.classList.contains("open")) closePropertyModal();
-  });
+  if (closeBtn) closeBtn.addEventListener("click", () => closeModal("propertyModal"));
+  initModalDismissal("propertyModal");
 }
 
 /* ==========================================================================
-   3. TESTIMONIAL RENDERER + CAROUSEL
+   2b. GENERIC MODAL SYSTEM
+   ------------------------------------------------------------------------
+   Shared open/close plumbing for every ".property-modal" on the page —
+   the property-details modal plus the three lead-form modals below.
+   Each modal closes on: its own close button(s), clicking the dimmed
+   backdrop, or ESC. Body scroll is locked while any one of them is open.
    ========================================================================== */
-let tIndex = 0;
+function openModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+  const focusTarget = modal.querySelector(".modal-close, input, select, textarea, button");
+  if (focusTarget) focusTarget.focus();
+}
 
-function renderTestimonials() {
-  const slidesWrap = document.getElementById("tSlides");
-  const dotsWrap = document.getElementById("tDots");
-  if (!slidesWrap || !dotsWrap) return;
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  // Only restore scrolling if no other modal is still open.
+  const anyOpen = document.querySelector(".property-modal.open");
+  if (!anyOpen) document.body.style.overflow = "";
+}
 
-  slidesWrap.innerHTML = TESTIMONIALS.map(t => {
-    const initials = t.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
-    return `
-    <div class="t-slide">
-      <div class="t-card">
-        <div class="t-quote-mark" aria-hidden="true">&ldquo;</div>
-        <div class="t-stars" aria-hidden="true">★★★★★</div>
-        <p class="t-quote">${t.quote}</p>
-        <div class="t-person">
-          <div class="t-avatar" aria-hidden="true">${initials}</div>
-          <div class="t-person-text">
-            <div class="t-name">${t.name}</div>
-            <div class="t-role">${t.role}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  }).join("");
+function initModalDismissal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
 
-  dotsWrap.innerHTML = "";
-  TESTIMONIALS.forEach((_, i) => {
-    const dot = document.createElement("button");
-    dot.type = "button";
-    dot.className = "t-dot" + (i === 0 ? " active" : "");
-    dot.setAttribute("aria-label", `Show testimonial ${i + 1}`);
-    dot.addEventListener("click", () => goToTestimonial(i));
-    dotsWrap.appendChild(dot);
+  modal.addEventListener("click", e => {
+    if (e.target === modal) closeModal(modalId);
+  });
+
+  modal.querySelectorAll("[data-close-modal]").forEach(btn => {
+    btn.addEventListener("click", () => closeModal(modalId));
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && modal.classList.contains("open")) closeModal(modalId);
   });
 }
 
-function goToTestimonial(i) {
-  const slidesWrap = document.getElementById("tSlides");
-  const dotsWrap = document.getElementById("tDots");
-  if (!slidesWrap || !dotsWrap || !TESTIMONIALS.length) return;
+/* Wires up every element with data-open-modal="someModalId" (header nav,
+   mobile drawer nav) to open that modal — and close the mobile drawer
+   first if it happens to be open. */
+function initModalTriggers() {
+  document.querySelectorAll("[data-open-modal]").forEach(trigger => {
+    trigger.addEventListener("click", () => {
+      const targetId = trigger.getAttribute("data-open-modal");
+      const drawer = document.getElementById("mobileNav");
+      if (drawer && drawer.classList.contains("open")) {
+        drawer.classList.remove("open");
+        document.getElementById("mobileNavOverlay")?.classList.remove("open");
+        document.getElementById("hamburger")?.setAttribute("aria-expanded", "false");
+        document.body.classList.remove("no-scroll");
+      }
+      openModal(targetId);
+    });
+  });
 
-  tIndex = (i + TESTIMONIALS.length) % TESTIMONIALS.length;
-  slidesWrap.style.transform = `translateX(-${tIndex * 100}%)`;
-  [...dotsWrap.children].forEach((dot, idx) => dot.classList.toggle("active", idx === tIndex));
+  ["listWithUsModal", "valuationModal", "jointVentureModal", "nriModal", "enquiryModal"].forEach(initModalDismissal);
 }
 
-function initTestimonialCarousel() {
-  const prevBtn = document.getElementById("tPrev");
-  const nextBtn = document.getElementById("tNext");
-  const wrap = document.querySelector(".t-wrap");
-  if (!wrap || !TESTIMONIALS.length) return;
+/* ==========================================================================
+   2c. LEAD FORMS (List With Us / Free Valuation / Property Enquiry)
+   ------------------------------------------------------------------------
+   This is a static site with no backend, so "submitting" a form composes
+   a pre-filled email to the office inbox via mailto: — the same real
+   mechanism the Contact form already uses — then shows a success message
+   and resets the form. File inputs can't be attached via mailto:, so the
+   List With Us form's photo field is a courtesy convenience only; the
+   copy next to it says as much.
+   ========================================================================== */
+function initLeadForm({ formId, successId, requiredIds, subjectPrefix, labels }) {
+  const form = document.getElementById(formId);
+  const success = document.getElementById(successId);
+  if (!form || !success) return;
 
-  prevBtn.addEventListener("click", () => goToTestimonial(tIndex - 1));
-  nextBtn.addEventListener("click", () => goToTestimonial(tIndex + 1));
+  form.addEventListener("submit", e => {
+    e.preventDefault();
 
-  let auto = setInterval(() => goToTestimonial(tIndex + 1), 6000);
-  wrap.addEventListener("mouseenter", () => clearInterval(auto));
-  wrap.addEventListener("mouseleave", () => {
-    auto = setInterval(() => goToTestimonial(tIndex + 1), 6000);
+    // Validate every required field (not just until the first failure)
+    // so all invalid fields get flagged at once, not just the first one.
+    const isValid = requiredIds
+      .map(id => {
+        const field = document.getElementById(id);
+        const wrapper = field.closest(".field");
+        const valid = field.value.trim().length > 0 && field.checkValidity();
+        wrapper.classList.toggle("invalid", !valid);
+        return valid;
+      })
+      .every(Boolean);
+
+    if (!isValid) return;
+
+    const nameField = form.querySelector('input[name="name"]');
+    const subject = encodeURIComponent(`${subjectPrefix}${nameField ? " from " + nameField.value : ""}`);
+
+    const lines = [];
+    labels.forEach(([id, label]) => {
+      const field = document.getElementById(id);
+      if (!field || field.type === "file") return;
+      const value = field.value.trim();
+      if (value) lines.push(`${label}: ${value}`);
+    });
+
+    window.location.href = `mailto:homehunterzady@gmail.com?subject=${subject}&body=${encodeURIComponent(lines.join("\n"))}`;
+    success.classList.add("show");
+    form.reset();
   });
+}
+
+function initLeadForms() {
+  initLeadForm({
+    formId: "listWithUsForm",
+    successId: "listWithUsSuccess",
+    requiredIds: ["lw-name", "lw-mobile", "lw-type", "lw-location"],
+    subjectPrefix: "New Property Listing",
+    labels: [
+      ["lw-name", "Name"], ["lw-mobile", "Mobile"], ["lw-whatsapp", "WhatsApp"], ["lw-email", "Email"],
+      ["lw-type", "Property Type"], ["lw-listing-type", "Listing Type"], ["lw-location", "Location"],
+      ["lw-address", "Address"], ["lw-size", "Property Size"], ["lw-builtup", "Built-up Area"],
+      ["lw-bedrooms", "Bedrooms"], ["lw-bathrooms", "Bathrooms"], ["lw-price", "Expected Price/Rent"],
+      ["lw-description", "Description"], ["lw-additional", "Additional Info"],
+      ["lw-contact-method", "Preferred Contact Method"]
+    ]
+  });
+
+  initLeadForm({
+    formId: "valuationForm",
+    successId: "valuationSuccess",
+    requiredIds: ["fv-name", "fv-mobile", "fv-location"],
+    subjectPrefix: "Free Valuation Request",
+    labels: [
+      ["fv-name", "Name"], ["fv-mobile", "Mobile"], ["fv-whatsapp", "WhatsApp"], ["fv-email", "Email"],
+      ["fv-type", "Property Type"], ["fv-location", "Location"], ["fv-address", "Address"],
+      ["fv-size", "Property Size"], ["fv-builtup", "Built-up Area"], ["fv-age", "Property Age"],
+      ["fv-price", "Expected Value"], ["fv-details", "Additional Details"]
+    ]
+  });
+
+  initLeadForm({
+    formId: "jointVentureForm",
+    successId: "jointVentureSuccess",
+    requiredIds: ["jv-name", "jv-phone", "jv-location"],
+    subjectPrefix: "Join Venture Enquiry",
+    labels: [
+      ["jv-name", "Name"], ["jv-phone", "Phone"], ["jv-email", "Email"],
+      ["jv-location", "Property/Project Location"], ["jv-type", "Property Type"],
+      ["jv-details", "Land Area/Project Details"], ["jv-requirement", "JV Requirement"],
+      ["jv-message", "Message"]
+    ]
+  });
+
+  initLeadForm({
+    formId: "nriForm",
+    successId: "nriSuccess",
+    requiredIds: ["nri-name", "nri-mobile", "nri-email", "nri-country", "nri-requirement"],
+    subjectPrefix: "NRI Property Enquiry",
+    labels: [
+      ["nri-name", "Name"], ["nri-mobile", "Mobile"], ["nri-whatsapp", "WhatsApp"], ["nri-email", "Email"],
+      ["nri-country", "Country of Residence"], ["nri-contact-method", "Preferred Contact Method"],
+      ["nri-requirement", "Property Requirement"], ["nri-location", "Preferred Location"],
+      ["nri-type", "Property Type"], ["nri-budget", "Budget"], ["nri-timeline", "Timeline"],
+      ["nri-message", "Message"]
+    ]
+  });
+
+  initLeadForm({
+    formId: "enquiryForm",
+    successId: "enquirySuccess",
+    requiredIds: ["enq-name", "enq-mobile"],
+    subjectPrefix: "Property Enquiry",
+    labels: [
+      ["enq-property", "Property"], ["enq-name", "Name"], ["enq-mobile", "Mobile"],
+      ["enq-whatsapp", "WhatsApp"], ["enq-email", "Email"], ["enq-message", "Message"]
+    ]
+  });
+
+  // File input label: reflect the chosen file count so it doesn't look inert.
+  const fileInput = document.getElementById("lw-images");
+  const fileLabel = document.getElementById("lw-images-label");
+  if (fileInput && fileLabel) {
+    fileInput.addEventListener("change", () => {
+      fileLabel.textContent = fileInput.files.length
+        ? `${fileInput.files.length} photo${fileInput.files.length > 1 ? "s" : ""} selected`
+        : "Choose photos of the property";
+    });
+  }
+}
+
+function openEnquiryModal(propertyTitle) {
+  const nameEl = document.getElementById("enquiry-property-name");
+  const hiddenField = document.getElementById("enq-property");
+  if (nameEl) nameEl.textContent = propertyTitle;
+  if (hiddenField) hiddenField.value = propertyTitle;
+  openModal("enquiryModal");
 }
 
 /* ==========================================================================
@@ -621,6 +783,76 @@ function initHeroSearch() {
 }
 
 /* ==========================================================================
+   6b. SECTION DOT NAVIGATION
+   ------------------------------------------------------------------------
+   Drives the fixed right-side dot navigator: clicking a dot smooth-scrolls
+   to its section, and an IntersectionObserver keeps the active dot (and
+   the matching header/mobile-drawer nav link, matched by data-section)
+   in sync as the visitor scrolls. Whichever tracked section currently has
+   the largest visible share of the viewport wins.
+   ========================================================================== */
+function initSectionDots() {
+  const dots = Array.from(document.querySelectorAll(".section-dot"));
+  if (!dots.length) return;
+
+  // The "top" dot scrolls to #top (the very start of the page) but must
+  // watch the .hero section for active-state purposes, not #top itself —
+  // #top is the <main> element wrapping the entire page, so its own
+  // intersection ratio (intersecting area ÷ its own huge bounding box)
+  // would always be tiny and lose to small sections.
+  const sections = dots
+    .map(dot => {
+      const id = dot.dataset.target;
+      const scrollEl = document.getElementById(id);
+      const observeEl = id === "top" ? document.querySelector(".hero") : scrollEl;
+      return { id, scrollEl, observeEl, dot };
+    })
+    .filter(s => s.scrollEl && s.observeEl);
+
+  if (!sections.length) return;
+
+  const navLinks = document.querySelectorAll("[data-section]");
+
+  function setActive(id) {
+    sections.forEach(s => s.dot.classList.toggle("active", s.id === id));
+    navLinks.forEach(link => link.classList.toggle("active", link.dataset.section === id));
+  }
+
+  dots.forEach(dot => {
+    dot.addEventListener("click", () => {
+      const target = document.getElementById(dot.dataset.target);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
+  // Standard "scrollspy" technique: watch for each section crossing a thin
+  // horizontal trigger line a little above viewport-center (rootMargin
+  // shrinks the observer's effective viewport to just that band), rather
+  // than comparing intersection ratios across very differently-sized
+  // sections (which "Services" — a small panel nested inside the much
+  // larger hero — would otherwise win unfairly on initial load).
+  const currentlyIntersecting = new Set();
+  const io = new IntersectionObserver(
+    entries => {
+      entries.forEach(entry => {
+        const section = sections.find(s => s.observeEl === entry.target);
+        if (!section) return;
+        if (entry.isIntersecting) currentlyIntersecting.add(section.id);
+        else currentlyIntersecting.delete(section.id);
+      });
+      // Prefer the last (lowest, most-recently-entered) section touching
+      // the trigger line, matching DOM/section order.
+      const activeId = sections.map(s => s.id).filter(id => currentlyIntersecting.has(id)).pop();
+      if (activeId) setActive(activeId);
+    },
+    { threshold: 0, rootMargin: "-45% 0px -50% 0px" }
+  );
+
+  sections.forEach(s => io.observe(s.observeEl));
+  setActive("top");
+}
+
+/* ==========================================================================
    7. SCROLL REVEAL ANIMATIONS
    ========================================================================== */
 function observeReveal(els) {
@@ -664,12 +896,14 @@ function initContactForm() {
     const emailField = document.getElementById("cf-email");
     const messageField = document.getElementById("cf-message");
 
-    const isValid = [nameField, phoneField, emailField, messageField].every(field => {
-      const wrapper = field.closest(".field");
-      const valid = field.value.trim().length > 0 && field.checkValidity();
-      wrapper.classList.toggle("invalid", !valid);
-      return valid;
-    });
+    const isValid = [nameField, phoneField, emailField, messageField]
+      .map(field => {
+        const wrapper = field.closest(".field");
+        const valid = field.value.trim().length > 0 && field.checkValidity();
+        wrapper.classList.toggle("invalid", !valid);
+        return valid;
+      })
+      .every(Boolean);
 
     if (!isValid) return;
 
@@ -697,16 +931,17 @@ function setFooterYear() {
    ========================================================================== */
 document.addEventListener("DOMContentLoaded", () => {
   renderProperties();
-  // renderTestimonials() / initTestimonialCarousel() are paused — the
-  // Testimonials section in index.html is commented out until real
-  // client reviews are available. Uncomment both when it's restored.
   initPropertyModal();
+  initModalTriggers();
+  initLeadForms();
   initHeaderScrollEffects();
   initHeroSlideshow();
   initHeroIntentSelector();
   initMobileNav();
+  initSectionDots();
   initHeroSearch();
   initScrollReveal();
   initContactForm();
   setFooterYear();
+  openPropertyFromUrl();
 });
