@@ -431,6 +431,8 @@ header .container{display:flex;align-items:center;justify-content:space-between;
 .prop-more{color:var(--orange-600) !important;font-weight:700;}
 .properties-note{text-align:center;margin-top:44px;font-size:14px;color:var(--slate);}
 .prop-empty{text-align:center;padding:60px 20px;color:var(--slate);font-size:15px;}
+.prop-load-more-wrap{display:flex;justify-content:center;margin-top:36px;}
+.prop-load-more-count{opacity:.7;font-weight:500;}
 .prop-empty-reset{color:var(--orange-600);font-weight:700;text-decoration:underline;text-underline-offset:2px;}
 
 /* Property card action row: call / whatsapp icon buttons + view details */

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Media Library — Home Hunterz Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+<script>window.ADMIN_PAGE_TITLE = "Media Library"; window.ADMIN_ACTIVE_NAV = "media";</script>
+</head>
+<body>
+<div id="adminShellSlot"></div>
+
+<template id="mediaTemplate">
+  <div class="admin-card" style="padding:16px 20px;margin-bottom:18px;">
+    <input type="text" id="mediaSearch" placeholder="Search filenames…" style="width:100%;max-width:340px;padding:10px 14px;border:1.5px solid var(--line);border-radius:11px;">
+  </div>
+  <p style="font-size:12.5px;color:var(--slate);margin-bottom:16px;">
+    All property photos live here, uploaded from each property's Images tab. This view is read-only for browsing/deleting — to add new images, open the property in
+    <a href="properties.html" style="color:var(--orange-600);font-weight:600;">Properties</a> and use its Images tab.
+  </p>
+  <div class="admin-image-grid" id="mediaGrid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));"></div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="../js/supabase-client.js" defer></script>
+<script src="js/admin-auth.js" defer></script>
+<script src="js/admin-shell.js" defer></script>
+<script src="js/admin-media.js" defer></script>
+</body>
+</html>

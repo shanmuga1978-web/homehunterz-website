@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin Profile — Home Hunterz Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+<script>window.ADMIN_PAGE_TITLE = "Admin Profile"; window.ADMIN_ACTIVE_NAV = "profile";</script>
+</head>
+<body>
+<div id="adminShellSlot"></div>
+
+<template id="profileTemplate">
+  <div class="admin-card" style="padding:22px;max-width:520px;margin-bottom:18px;">
+    <h2 style="font-size:15px;margin-bottom:16px;">Account</h2>
+    <div class="admin-field"><label>Email</label><input type="email" id="profileEmail" disabled style="background:var(--mist);"></div>
+    <p class="admin-field-hint">To add another admin user (e.g. a team member), go to your Supabase project → Authentication → Users → Add User.</p>
+  </div>
+
+  <div class="admin-card" style="padding:22px;max-width:520px;">
+    <h2 style="font-size:15px;margin-bottom:16px;">Change Password</h2>
+    <form id="changePasswordForm" novalidate>
+      <div class="admin-field">
+        <label>New Password</label>
+        <input type="password" id="newPassword" minlength="6" required>
+        <p class="admin-field-hint">At least 6 characters.</p>
+      </div>
+      <div class="admin-field">
+        <label>Confirm New Password</label>
+        <input type="password" id="confirmPassword" minlength="6" required>
+      </div>
+      <button type="submit" class="admin-btn admin-btn-primary">Update Password</button>
+    </form>
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="../js/supabase-client.js" defer></script>
+<script src="js/admin-auth.js" defer></script>
+<script src="js/admin-shell.js" defer></script>
+<script src="js/admin-profile.js" defer></script>
+</body>
+</html>

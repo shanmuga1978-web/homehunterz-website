@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Dashboard — Home Hunterz Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+<script>window.ADMIN_PAGE_TITLE = "Dashboard"; window.ADMIN_ACTIVE_NAV = "dashboard";</script>
+</head>
+<body>
+
+<div id="adminShellSlot"></div>
+
+<template id="dashboardTemplate">
+  <div class="admin-stat-grid" id="statGrid">
+    <!-- filled by admin-dashboard.js -->
+  </div>
+
+  <div class="admin-two-col">
+    <div class="admin-card" style="padding:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="font-size:15px;">Recent Properties</h2>
+        <a href="properties.html" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
+      </div>
+      <div id="recentProperties"><p style="color:var(--slate);font-size:13px;">Loading…</p></div>
+    </div>
+
+    <div class="admin-card" style="padding:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="font-size:15px;">Recent Enquiries</h2>
+        <a href="leads.html" class="admin-btn admin-btn-ghost admin-btn-sm">View all</a>
+      </div>
+      <div id="recentLeads"><p style="color:var(--slate);font-size:13px;">Loading…</p></div>
+    </div>
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="../js/supabase-client.js" defer></script>
+<script src="js/admin-auth.js" defer></script>
+<script src="js/admin-shell.js" defer></script>
+<script src="js/admin-dashboard.js" defer></script>
+</body>
+</html>

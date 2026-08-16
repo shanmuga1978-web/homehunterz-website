@@ -28,7 +28,12 @@
    builds a <picture> tag that serves the .webp version with a .jpg
    fallback, so just save both files with that same name.
    ========================================================================== */
-const PROPERTIES = [
+/* `let`, not `const` — loadPropertiesFromSupabase() below replaces this
+   array with live data from the database once it loads. This hardcoded
+   list is now only the fallback used if Supabase hasn't been configured
+   yet (see js/supabase-client.js) or the fetch fails, so the public site
+   never breaks. */
+let PROPERTIES = [
   {
     id: "prop-1",
     tag: "For Sale",
@@ -162,8 +167,7 @@ const PROPERTIES = [
 /* Testimonials are static markup directly in index.html now (see the
    Testimonials section) rather than JS-rendered, since it's a fixed
    3-card grid rather than a carousel — simpler to hand-edit later when
-   swapping in real client reviews.
-];
+   swapping in real client reviews. */
 
 /* Shared contact details used across property cards and the modal. */
 const CONTACT = {
@@ -173,16 +177,142 @@ const CONTACT = {
 };
 
 /* ==========================================================================
+   1b. LIVE PROPERTY DATA (Supabase)
+   ------------------------------------------------------------------------
+   Fetches published, non-archived properties (each with only its
+   featured image, not the whole gallery — the gallery is fetched
+   separately, scoped to one property, when its modal actually opens)
+   and maps them into the exact same shape as the hardcoded PROPERTIES
+   array above, so renderProperties(), openPropertyModal(), the hero
+   search, and the ?property= deep-link all keep working completely
+   unchanged — they have no idea whether a given property came from the
+   fallback array or the database.
+
+   IMPORTANT: Supabase/PostgREST caps any single .select() at a default
+   maximum row count (commonly 1000) — silently, with no error. A plain
+   .select() here would quietly stop showing new listings once the
+   catalogue passed that number. fetchAllPublished() below batches the
+   request with .range() instead, looping until a page comes back
+   smaller than the batch size, so it correctly returns every published
+   property regardless of how large the catalogue grows.
+
+   Falls back to the existing hardcoded array (silently, with a console
+   note) if Supabase isn't configured yet or the request fails, so the
+   public site is never broken by a database hiccup.
+   ========================================================================== */
+const SUPABASE_FETCH_BATCH_SIZE = 1000; // a request-batching chunk size, not a property-count limit
+
+async function fetchAllPublishedProperties() {
+  let from = 0;
+  let allRows = [];
+
+  while (true) {
+    const { data, error } = await window.supabaseClient
+      .from("properties")
+      // Only the featured image (falling back to whichever comes first)
+      // is fetched here — the full gallery for a property is fetched
+      // separately, scoped to just that property, only when its modal
+      // is opened. Pulling every gallery image for every card on the
+      // homepage would multiply the payload for no benefit.
+      .select("*, property_images(id, public_url, alt_text, is_featured_image)")
+      .eq("is_published", true)
+      .eq("is_archived", false)
+      .order("created_at", { ascending: false })
+      .order("is_featured_image", { ascending: false, foreignTable: "property_images" })
+      .range(from, from + SUPABASE_FETCH_BATCH_SIZE - 1);
+
+    if (error) throw error;
+    if (!data || !data.length) break;
+
+    allRows = allRows.concat(data);
+    if (data.length < SUPABASE_FETCH_BATCH_SIZE) break; // last (partial) page — no more rows to fetch
+    from += SUPABASE_FETCH_BATCH_SIZE;
+  }
+
+  return allRows;
+}
+
+async function loadPropertiesFromSupabase() {
+  if (!window.supabaseClient) {
+    console.info("Supabase not configured yet — showing built-in sample properties. See supabase/SETUP.md.");
+    return;
+  }
+
+  try {
+    const data = await fetchAllPublishedProperties();
+    if (!data || !data.length) return; // keep the fallback list rather than showing an empty site
+
+    PROPERTIES = data.map(row => {
+      const images = row.property_images || [];
+      const featuredImage = images.find(img => img.is_featured_image) || images[0];
+      const tag = ["Sold", "Rented", "Under Offer"].includes(row.status) ? row.status : row.listing_type;
+
+      const features = [
+        row.bedrooms ? `${row.bedrooms} BHK` : null,
+        row.builtup_area ? `Built-up Area: ${row.builtup_area}` : null,
+        row.land_area ? `Land Area: ${row.land_area}` : null,
+        row.uds ? `UDS: ${row.uds}` : null,
+        row.floor_number ? row.floor_number : null,
+        row.car_parking ? row.car_parking : null,
+        row.furnishing || null,
+        row.property_age ? `${row.property_age} Old` : null
+      ].filter(Boolean);
+
+      return {
+        id: row.slug,
+        tag: tag || "Available",
+        title: row.title,
+        location: row.location || "",
+        price: row.is_price_on_request ? null : row.display_price,
+        image: featuredImage ? featuredImage.public_url : "",
+        imageAlt: (featuredImage && featuredImage.alt_text) || row.title,
+        features: features.length ? features : ["Contact us for full specifications"]
+      };
+    });
+
+    renderProperties();
+    console.info(`Loaded ${PROPERTIES.length} propert${PROPERTIES.length === 1 ? "y" : "ies"} from Supabase.`);
+  } catch (err) {
+    console.warn("Could not load properties from Supabase — showing built-in sample properties instead.", err);
+  }
+}
+
+/* ==========================================================================
    2. PROPERTY CARD RENDERER + DETAILS MODAL
    ========================================================================== */
+// How many property cards render into the DOM at once. This is purely a
+// rendering/pagination detail for the browser's sake — it has nothing to
+// do with how many properties are fetched or how many exist in the
+// database (that remains fully unlimited; see fetchAllPublishedProperties
+// above). All matching properties are already in memory in `currentGridList`
+// the moment a search/filter runs; "Load More" just reveals more of what's
+// already there, no extra network request needed.
+const PROPERTY_GRID_INITIAL_COUNT = 24;
+const PROPERTY_GRID_LOAD_MORE_COUNT = 24;
+
+let currentGridList = null;
+let currentGridQuery = undefined;
+let visibleGridCount = PROPERTY_GRID_INITIAL_COUNT;
+
 function renderProperties(list, query) {
+  // A genuinely new result set (initial load, a new search, a filter
+  // change, "clear search") always starts back at the top with a fresh
+  // batch — only the "Load More" button itself should extend the count
+  // without resetting it (see loadMoreProperties() below).
+  currentGridList = list || PROPERTIES;
+  currentGridQuery = query;
+  visibleGridCount = PROPERTY_GRID_INITIAL_COUNT;
+  renderPropertyGridBatch();
+}
+
+function renderPropertyGridBatch() {
   const grid = document.getElementById("propertyGrid");
   if (!grid) return;
-  const items = list || PROPERTIES;
+  const items = currentGridList || [];
 
   if (!items.length) {
-    grid.innerHTML = query
-      ? `<p class="prop-empty">No properties found for "${escapeHtml(query)}". <button type="button" class="prop-empty-reset" id="propEmptyReset">Clear search</button> or contact us directly for current inventory.</p>`
+    grid.innerHTML = currentGridQuery
+      ? `<p class="prop-empty">No properties found for "${escapeHtml(currentGridQuery)}". <button type="button" class="prop-empty-reset" id="propEmptyReset">Clear search</button> or contact us directly for current inventory.</p>`
       : '<p class="prop-empty">New listings are being added — check back soon, or contact us directly for current inventory.</p>';
     const resetBtn = document.getElementById("propEmptyReset");
     if (resetBtn) {
@@ -195,7 +325,10 @@ function renderProperties(list, query) {
     return;
   }
 
-  grid.innerHTML = items.map(buildPropertyCard).join("");
+  const visibleItems = items.slice(0, visibleGridCount);
+  const remaining = items.length - visibleItems.length;
+
+  grid.innerHTML = visibleItems.map(buildPropertyCard).join("");
 
   // Wire up "View Details" buttons after render
   grid.querySelectorAll("[data-view-details]").forEach(btn => {
@@ -204,6 +337,31 @@ function renderProperties(list, query) {
 
   // Fade the freshly-injected cards in (own observer, scoped to this grid).
   observeReveal(grid.querySelectorAll(".reveal"));
+
+  renderLoadMoreControl(remaining);
+}
+
+function renderLoadMoreControl(remaining) {
+  const existing = document.getElementById("propLoadMoreWrap");
+  if (existing) existing.remove();
+  if (remaining <= 0) return;
+
+  const grid = document.getElementById("propertyGrid");
+  const wrap = document.createElement("div");
+  wrap.id = "propLoadMoreWrap";
+  wrap.className = "prop-load-more-wrap";
+  wrap.innerHTML = `
+    <button type="button" class="btn btn-outline dark" id="propLoadMoreBtn">
+      Load More Properties <span class="prop-load-more-count">(${remaining} more)</span>
+    </button>
+  `;
+  grid.insertAdjacentElement("afterend", wrap);
+  document.getElementById("propLoadMoreBtn").addEventListener("click", loadMoreProperties);
+}
+
+function loadMoreProperties() {
+  visibleGridCount += PROPERTY_GRID_LOAD_MORE_COUNT;
+  renderPropertyGridBatch();
 }
 
 function escapeHtml(str) {
@@ -227,10 +385,7 @@ function buildPropertyCard(property) {
   return `
     <article class="prop-card reveal" aria-labelledby="${property.id}-title">
       <div class="prop-media">
-        <picture>
-          <source srcset="${property.image}.webp" type="image/webp">
-          <img src="${property.image}.jpg" alt="${property.imageAlt}" loading="lazy" width="900" height="600">
-        </picture>
+        ${buildPropertyPicture(property, 'loading="lazy" width="900" height="600"')}
         <span class="prop-tag">${property.tag}</span>
       </div>
       <div class="prop-body">
@@ -258,6 +413,24 @@ function featureIcon() {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
 }
 
+/* Supports two image conventions so admin-added properties (a single
+   full Supabase Storage URL, already has its own extension) and the
+   original hardcoded properties (a base path with separate .jpg/.webp
+   files) both render correctly without any other code needing to care
+   which one a given property uses. */
+function buildPropertyPicture(property, imgAttrs) {
+  const hasExtension = /\.(jpe?g|png|webp|avif)$/i.test(property.image);
+  if (hasExtension) {
+    return `<img src="${property.image}" alt="${property.imageAlt}" ${imgAttrs}>`;
+  }
+  return `
+    <picture>
+      <source srcset="${property.image}.webp" type="image/webp">
+      <img src="${property.image}.jpg" alt="${property.imageAlt}" ${imgAttrs}>
+    </picture>
+  `;
+}
+
 function openPropertyModal(propertyId) {
   const property = PROPERTIES.find(p => p.id === propertyId);
   const modal = document.getElementById("propertyModal");
@@ -272,10 +445,7 @@ function openPropertyModal(propertyId) {
   const waMessage = encodeURIComponent(`Hi Home Hunterz, I'm interested in "${property.title}". Could you share more details?`);
 
   body.innerHTML = `
-    <picture>
-      <source srcset="${property.image}.webp" type="image/webp">
-      <img src="${property.image}.jpg" alt="${property.imageAlt}" width="900" height="600">
-    </picture>
+    ${buildPropertyPicture(property, 'width="900" height="600"')}
     <div class="modal-tag-row">
       <span class="prop-tag modal-tag">${property.tag}</span>
       <button type="button" class="modal-share-btn" data-share-property aria-label="Share this property">
@@ -435,12 +605,12 @@ function initModalTriggers() {
    List With Us form's photo field is a courtesy convenience only; the
    copy next to it says as much.
    ========================================================================== */
-function initLeadForm({ formId, successId, requiredIds, subjectPrefix, labels }) {
+function initLeadForm({ formId, successId, requiredIds, subjectPrefix, labels, source, coreFields }) {
   const form = document.getElementById(formId);
   const success = document.getElementById(successId);
   if (!form || !success) return;
 
-  form.addEventListener("submit", e => {
+  form.addEventListener("submit", async e => {
     e.preventDefault();
 
     // Validate every required field (not just until the first failure)
@@ -461,12 +631,38 @@ function initLeadForm({ formId, successId, requiredIds, subjectPrefix, labels })
     const subject = encodeURIComponent(`${subjectPrefix}${nameField ? " from " + nameField.value : ""}`);
 
     const lines = [];
+    const sourceDetails = {};
     labels.forEach(([id, label]) => {
       const field = document.getElementById(id);
       if (!field || field.type === "file") return;
       const value = field.value.trim();
-      if (value) lines.push(`${label}: ${value}`);
+      if (value) {
+        lines.push(`${label}: ${value}`);
+        sourceDetails[label] = value;
+      }
     });
+
+    // Write to the Leads inbox in Admin (if Supabase is configured) — this
+    // is what actually lets an admin see and manage the enquiry, not just
+    // receive an email about it. Runs alongside the existing mailto
+    // notification, never blocking it: if the database write fails for
+    // any reason (offline, RLS misconfigured, etc.) the visitor's email
+    // still opens exactly as before, so no enquiry is ever silently lost.
+    if (window.supabaseClient && source) {
+      const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ""; };
+      window.supabaseClient.from("leads").insert({
+        name: coreFields && coreFields.name ? get(coreFields.name) : (nameField ? nameField.value.trim() : null),
+        phone: coreFields && coreFields.phone ? get(coreFields.phone) : null,
+        whatsapp: coreFields && coreFields.whatsapp ? get(coreFields.whatsapp) : null,
+        email: coreFields && coreFields.email ? get(coreFields.email) : null,
+        message: coreFields && coreFields.message ? get(coreFields.message) : null,
+        property_title_snapshot: coreFields && coreFields.property ? get(coreFields.property) : null,
+        source,
+        source_details: sourceDetails
+      }).then(({ error }) => {
+        if (error) console.warn(`Lead saved via email only (database write failed): ${error.message}`);
+      });
+    }
 
     window.location.href = `mailto:homehunterzady@gmail.com?subject=${subject}&body=${encodeURIComponent(lines.join("\n"))}`;
     success.classList.add("show");
@@ -480,6 +676,8 @@ function initLeadForms() {
     successId: "listWithUsSuccess",
     requiredIds: ["lw-name", "lw-mobile", "lw-type", "lw-location"],
     subjectPrefix: "New Property Listing",
+    source: "list_with_us",
+    coreFields: { name: "lw-name", phone: "lw-mobile", whatsapp: "lw-whatsapp", email: "lw-email" },
     labels: [
       ["lw-name", "Name"], ["lw-mobile", "Mobile"], ["lw-whatsapp", "WhatsApp"], ["lw-email", "Email"],
       ["lw-type", "Property Type"], ["lw-listing-type", "Listing Type"], ["lw-location", "Location"],
@@ -495,6 +693,8 @@ function initLeadForms() {
     successId: "valuationSuccess",
     requiredIds: ["fv-name", "fv-mobile", "fv-location"],
     subjectPrefix: "Free Valuation Request",
+    source: "free_valuation",
+    coreFields: { name: "fv-name", phone: "fv-mobile", whatsapp: "fv-whatsapp", email: "fv-email" },
     labels: [
       ["fv-name", "Name"], ["fv-mobile", "Mobile"], ["fv-whatsapp", "WhatsApp"], ["fv-email", "Email"],
       ["fv-type", "Property Type"], ["fv-location", "Location"], ["fv-address", "Address"],
@@ -508,6 +708,8 @@ function initLeadForms() {
     successId: "jointVentureSuccess",
     requiredIds: ["jv-name", "jv-phone", "jv-location"],
     subjectPrefix: "Join Venture Enquiry",
+    source: "joint_venture",
+    coreFields: { name: "jv-name", phone: "jv-phone", email: "jv-email", message: "jv-message" },
     labels: [
       ["jv-name", "Name"], ["jv-phone", "Phone"], ["jv-email", "Email"],
       ["jv-location", "Property/Project Location"], ["jv-type", "Property Type"],
@@ -521,6 +723,8 @@ function initLeadForms() {
     successId: "nriSuccess",
     requiredIds: ["nri-name", "nri-mobile", "nri-email", "nri-country", "nri-requirement"],
     subjectPrefix: "NRI Property Enquiry",
+    source: "nri_services",
+    coreFields: { name: "nri-name", phone: "nri-mobile", whatsapp: "nri-whatsapp", email: "nri-email", message: "nri-message" },
     labels: [
       ["nri-name", "Name"], ["nri-mobile", "Mobile"], ["nri-whatsapp", "WhatsApp"], ["nri-email", "Email"],
       ["nri-country", "Country of Residence"], ["nri-contact-method", "Preferred Contact Method"],
@@ -535,6 +739,8 @@ function initLeadForms() {
     successId: "enquirySuccess",
     requiredIds: ["enq-name", "enq-mobile"],
     subjectPrefix: "Property Enquiry",
+    source: "property_enquiry",
+    coreFields: { name: "enq-name", phone: "enq-mobile", whatsapp: "enq-whatsapp", email: "enq-email", message: "enq-message", property: "enq-property" },
     labels: [
       ["enq-property", "Property"], ["enq-name", "Name"], ["enq-mobile", "Mobile"],
       ["enq-whatsapp", "WhatsApp"], ["enq-email", "Email"], ["enq-message", "Message"]
@@ -907,6 +1113,21 @@ function initContactForm() {
 
     if (!isValid) return;
 
+    // Same pattern as the other lead forms: write to the Admin Leads
+    // inbox (if configured) alongside the existing mailto notification,
+    // without ever blocking or depending on it.
+    if (window.supabaseClient) {
+      window.supabaseClient.from("leads").insert({
+        name: nameField.value.trim(),
+        phone: phoneField.value.trim(),
+        email: emailField.value.trim(),
+        message: messageField.value.trim(),
+        source: "contact_form"
+      }).then(({ error }) => {
+        if (error) console.warn(`Lead saved via email only (database write failed): ${error.message}`);
+      });
+    }
+
     const subject = encodeURIComponent(`New Enquiry from ${nameField.value}`);
     const body = encodeURIComponent(
       `Name: ${nameField.value}\nPhone: ${phoneField.value}\nEmail: ${emailField.value}\n\nMessage:\n${messageField.value}`
@@ -929,8 +1150,8 @@ function setFooterYear() {
 /* ==========================================================================
    10. INIT
    ========================================================================== */
-document.addEventListener("DOMContentLoaded", () => {
-  renderProperties();
+document.addEventListener("DOMContentLoaded", async () => {
+  renderProperties(); // paint immediately with fallback data — no blank/loading flash
   initPropertyModal();
   initModalTriggers();
   initLeadForms();
@@ -943,5 +1164,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initScrollReveal();
   initContactForm();
   setFooterYear();
-  openPropertyFromUrl();
+  await loadPropertiesFromSupabase(); // swaps in live data if/once it's ready
+  openPropertyFromUrl(); // runs after, so a shared link resolves against live data
 });

@@ -1018,6 +1018,12 @@
   </div>
 </div>
 
+<!-- Supabase client library + config. Both deferred and placed before
+     script.js so window.supabaseClient is ready before script.js's
+     DOMContentLoaded handler runs (deferred scripts execute in document
+     order). See supabase/SETUP.md for one-time setup. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="js/supabase-client.js" defer></script>
 <script src="js/script.js" defer></script>
 </body>
 </html>

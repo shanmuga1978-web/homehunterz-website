@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Properties — Home Hunterz Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+<script>window.ADMIN_PAGE_TITLE = "Properties"; window.ADMIN_ACTIVE_NAV = "properties-all";</script>
+</head>
+<body>
+
+<div id="adminShellSlot"></div>
+
+<template id="propertiesTemplate">
+  <div class="admin-card" style="padding:18px 20px;margin-bottom:18px;">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <input type="text" id="propSearch" placeholder="Search by title or location…" style="flex:1;min-width:200px;padding:10px 14px;border:1.5px solid var(--line);border-radius:11px;">
+      <select id="propFilterCategory" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="">All Categories</option>
+      </select>
+      <select id="propFilterListingType" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="">All Listing Types</option>
+        <option>For Sale</option><option>For Rent</option><option>For Lease</option>
+      </select>
+      <select id="propFilterStatus" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="">All Statuses</option>
+        <option>Available</option><option>Under Offer</option><option>Sold</option><option>Rented</option><option>Inactive</option>
+      </select>
+      <select id="propFilterPublished" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="">Published + Drafts</option>
+        <option value="published">Published only</option>
+        <option value="draft">Drafts only</option>
+      </select>
+      <select id="propSort" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="newest">Newest</option>
+        <option value="oldest">Oldest</option>
+        <option value="price_asc">Price: Low to High</option>
+        <option value="price_desc">Price: High to Low</option>
+        <option value="updated">Recently Updated</option>
+      </select>
+      <a href="property-edit.html" class="admin-btn admin-btn-primary">+ Add Property</a>
+    </div>
+  </div>
+
+  <div class="admin-card" style="overflow-x:auto;">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Listing</th>
+          <th>Status</th>
+          <th>Price</th>
+          <th>Featured</th>
+          <th>Published</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="propertiesTableBody">
+        <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--slate);">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
+    <span id="propResultCount" style="font-size:12.5px;color:var(--slate);"></span>
+    <div id="propPagination" style="display:flex;gap:6px;"></div>
+  </div>
+</template>
+
+<div class="admin-modal-overlay" id="deleteConfirmOverlay">
+  <div class="admin-modal">
+    <h3>Delete this property?</h3>
+    <p>This can't be undone. All of its images will be removed too. Consider Archiving instead if you might need it later.</p>
+    <div class="admin-modal-actions">
+      <button type="button" class="admin-btn admin-btn-outline" id="deleteCancelBtn">Cancel</button>
+      <button type="button" class="admin-btn admin-btn-danger" id="deleteConfirmBtn" style="background:var(--red);color:#fff;">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="../js/supabase-client.js" defer></script>
+<script src="js/admin-auth.js" defer></script>
+<script src="js/admin-shell.js" defer></script>
+<script src="js/admin-properties-list.js" defer></script>
+</body>
+</html>

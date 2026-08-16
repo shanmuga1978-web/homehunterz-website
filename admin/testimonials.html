@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Testimonials — Home Hunterz Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+<script>window.ADMIN_PAGE_TITLE = "Testimonials"; window.ADMIN_ACTIVE_NAV = "testimonials";</script>
+</head>
+<body>
+
+<div id="adminShellSlot"></div>
+
+<template id="testimonialsTemplate">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+    <button type="button" class="admin-btn admin-btn-primary" id="addTestimonialBtn">+ Add Testimonial</button>
+  </div>
+
+  <div class="admin-card" style="padding:16px 20px;margin-bottom:16px;background:#FFF3DC;border-color:#F5D28A;">
+    <strong style="font-size:13px;">Nothing here is shown publicly until you publish it.</strong>
+    <p style="font-size:12.5px;color:var(--slate);margin-top:4px;">New testimonials are saved as unpublished drafts by default — the public Testimonials section only ever shows reviews you've explicitly published, never automatically.</p>
+  </div>
+
+  <div id="testimonialsList"></div>
+</template>
+
+<div class="admin-modal-overlay" id="testimonialFormOverlay">
+  <div class="admin-modal" style="max-width:480px;">
+    <h3 id="testimonialModalTitle">Add Testimonial</h3>
+    <form id="testimonialForm" novalidate style="margin-top:14px;">
+      <input type="hidden" id="t-id">
+      <div class="admin-field"><label>Client Name <span class="req">*</span></label><input type="text" id="t-client_name" required></div>
+      <div class="admin-form-row">
+        <div class="admin-field"><label>Role</label><input type="text" id="t-client_role" placeholder="e.g. Property Buyer"></div>
+        <div class="admin-field"><label>Location</label><input type="text" id="t-location" placeholder="e.g. Adyar"></div>
+      </div>
+      <div class="admin-field"><label>Review <span class="req">*</span></label><textarea id="t-review" required style="min-height:110px;"></textarea></div>
+      <div class="admin-form-row">
+        <div class="admin-field"><label>Rating (1–5)</label><input type="number" id="t-rating" min="1" max="5"></div>
+        <div class="admin-field"><label>Photo URL</label><input type="url" id="t-photo_url"></div>
+      </div>
+      <label class="admin-checkbox" style="margin-bottom:18px;"><input type="checkbox" id="t-is_published"> Published (visible on the public site)</label>
+      <div class="admin-modal-actions">
+        <button type="button" class="admin-btn admin-btn-outline" id="testimonialCancelBtn">Cancel</button>
+        <button type="submit" class="admin-btn admin-btn-primary">Save Testimonial</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="../js/supabase-client.js" defer></script>
+<script src="js/admin-auth.js" defer></script>
+<script src="js/admin-shell.js" defer></script>
+<script src="js/admin-testimonials.js" defer></script>
+</body>
+</html>

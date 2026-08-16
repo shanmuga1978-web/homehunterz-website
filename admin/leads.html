@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Leads / Enquiries — Home Hunterz Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+<script>window.ADMIN_PAGE_TITLE = "Leads / Enquiries"; window.ADMIN_ACTIVE_NAV = "leads-all";</script>
+</head>
+<body>
+
+<div id="adminShellSlot"></div>
+
+<template id="leadsTemplate">
+  <div class="admin-card" style="padding:18px 20px;margin-bottom:18px;">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <input type="text" id="leadSearch" placeholder="Search by name, phone or email…" style="flex:1;min-width:200px;padding:10px 14px;border:1.5px solid var(--line);border-radius:11px;">
+      <select id="leadFilterSource" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="">All Sources</option>
+        <option value="property_enquiry">Property Enquiry</option>
+        <option value="list_with_us">List With Us</option>
+        <option value="free_valuation">Free Valuation</option>
+        <option value="joint_venture">Joint Venture</option>
+        <option value="nri_services">NRI Services</option>
+        <option value="contact_form">Contact Form</option>
+      </select>
+      <select id="leadFilterStatus" style="padding:10px 12px;border:1.5px solid var(--line);border-radius:11px;">
+        <option value="">All Statuses</option>
+        <option>New</option><option>Contacted</option><option>Follow-up</option><option>Qualified</option><option>Closed</option><option>Not Interested</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="admin-card" style="overflow-x:auto;">
+    <table class="admin-table">
+      <thead>
+        <tr><th>Name</th><th>Contact</th><th>Source</th><th>Property</th><th>Status</th><th>Date</th><th></th></tr>
+      </thead>
+      <tbody id="leadsTableBody"><tr><td colspan="7" style="text-align:center;padding:40px;color:var(--slate);">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <span id="leadResultCount" style="font-size:12.5px;color:var(--slate);display:block;margin-top:14px;"></span>
+</template>
+
+<div class="admin-modal-overlay" id="leadDetailOverlay">
+  <div class="admin-modal" style="max-width:520px;">
+    <div id="leadDetailBody"></div>
+    <div class="admin-modal-actions" style="margin-top:20px;">
+      <button type="button" class="admin-btn admin-btn-outline" id="leadDetailCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
+<script src="../js/supabase-client.js" defer></script>
+<script src="js/admin-auth.js" defer></script>
+<script src="js/admin-shell.js" defer></script>
+<script src="js/admin-leads.js" defer></script>
+</body>
+</html>
